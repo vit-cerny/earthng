@@ -1,5 +1,30 @@
 # Release verification
 
+## Moravia 0.4.1 — 2026-10-20
+
+Country pack rebuilt from Geofabrik `czech-republic-latest.osm.pbf` (2026-10-18), 9 regions,
+2,234 tiles. Changes: building heights from `height` / `building:levels` / type defaults;
+building grounding and 0.40 fixes in the planet runtime. Release `moravia-0.4.1` ships
+`earthng_czech-republic.zip` and the patched `earthng_planet.zip`.
+
+- BeamNG.drive **0.40.0.0.287428** (Steam build 26043678): `D:\earthng\test-mount.ps1`
+  PASS - three EarthNG mods mounted, `e2r_world` loaded, 0 Script Errors, 0 EarthNG
+  startup warnings (the `setExtensionUnloadMode` warning is fixed).
+- Automated run `earthng/test_world.py` (disposable profile, Brno 49.1951 / 16.6068):
+  level load 49.9 s cold and 8.0 s warm; drove 63.7 m, functional checks passed; gallery
+  screenshots at Brno and a village reviewed for grounded buildings, varied heights and
+  roofs, roads following the terrain.
+- Performance gate **failed**: 2-5 of about 600 frames over 100 ms during the first tile
+  generation (worst 0.33-1.46 s), mean 21.8-25.7 ms, p99 68-77 ms. This is a
+  cold-generation spike on one desktop, not a steady-state measurement.
+- Pack height check (region e0165-n490, 192,053 buildings in 30 blocks): share at exactly
+  9.0 m 51.4% -> 4.0%, mean 6.54 m -> 4.74 m. Census: `earthng/height_census.py`.
+- Known: five road-variant textures referenced by the planet ZIP are absent
+  (`road_worn`, `road_track`, `road_dirt`, `road_broken`, `road_gravel`); the game renders a
+  fallback and the same warnings appear on 0.39.4.
+- Local evidence: `D:\earthng\visual-041\report.json`, its screenshots and `beamng.log`;
+  release hashes in the `moravia-0.4.1` notes.
+
 ## Player package update — 2026-10-19
 
 The `EarthNG` release now separates the native planet (86.5 MB), the Albania demo
