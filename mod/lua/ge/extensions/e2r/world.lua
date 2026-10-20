@@ -1821,20 +1821,22 @@ local function makeHorizon(z, cx, cy)
 end
 
 local function beginArrival(job)
+  local arrivalTimer = hptimer()
   local manifest = type(job.manifest) == 'table' and job.manifest or jsonReadFile(job.manifest)
   if not manifest then return end
-  -- leave the previous region
+  -- leave the previous region: queued, one tile a frame. retireForest walks the whole Forest for
+  -- the tile's crowns and every group delete is a scene edit; the region in this frame stalled the
+  -- arrival for 7-14 s (world-test-warm-01). warmStep runs the queue before the state leaves
+  -- 'warmup', so no tile of the new place is dropped by a late retire.
+  S.warmQ, S.warmAt, S.warmN, S.warmGroups = {}, 0, 0, nil
   for key, tile in pairs(S.tiles) do
-    retireForest(tile)
-    dropGroup('E2RT_' .. key); dropGroup('E2RD_' .. key); dropGroup('E2RS_' .. key); tile.dropped = true
+    S.warmQ[#S.warmQ + 1] = {kind = 'tile', key = key, obj = tile}
   end
   for key, far in pairs(S.far) do
-    retireForest(far)
-    dropGroup('E2RF_' .. key); far.dropped = true
+    S.warmQ[#S.warmQ + 1] = {kind = 'far', key = key, obj = far}
   end
   for key, horizon in pairs(S.horizon or {}) do
-    dropGroup(horizon.groupName or ('E2RH_' .. key:gsub('[^%w_]', '_')))
-    horizon.dropped = true
+    S.warmQ[#S.warmQ + 1] = {kind = 'horizon', key = key, obj = horizon}
   end
   S.tiles, S.far, S.horizon, S.queue, S.co = {}, {}, {}, {}, nil
   -- traffic of the old place has no roads here
@@ -1858,8 +1860,14 @@ local function beginArrival(job)
   for _, path in ipairs(stockMaterials) do
     if FS:fileExists(path) then loadJsonMaterialsFile(path) end
   end
+  local matTimer = hptimer()
   loadNewMaterials(manifest.materials)
+  result.arrivalMs = result.arrivalMs or {}
+  result.arrivalMs.materials = math.floor(matTimer:stop())
+  local horizonTimer = hptimer()
   if manifest.spawn and job.horizonZ then pcall(makeHorizon, job.horizonZ, manifest.spawn.pos[1], manifest.spawn.pos[2]) end
+  result.arrivalMs.horizon = math.floor(horizonTimer:stop())
+  local packTimer = hptimer()
   if manifest.packs and FS:fileExists(manifest.packs) then
     local okP, packs = pcall(jsonReadFile, manifest.packs)
     S.packs = okP and packs and packs.fields or nil
@@ -1878,10 +1886,10 @@ local function beginArrival(job)
       S.packsExtra = true
     end
     -- every pack's textures load now, the normal way, on warm-up triangles (removed with the
-    -- warm-up; the materials keep them): a texture first met through a runtime swap streams in broken
+    -- warm-up; the materials keep them): a texture first met through a runtime swap streams in broken.
+    -- The triangles themselves are built a few a frame from M.tick (warmStep): all 811 of them in
+    -- one frame froze the game for 17 s right after the generation (world-test-warm-01).
     if okP and packs and packs.warm and not S.packsWarm then
-      local group = tileGroup('E2RWorldPacks')
-      local n = 0
       local all = {}
       for pack, defs in pairs(packs.warm) do all[pack] = defs end
       if packs.extra then all.extra = packs.extra end
@@ -1891,56 +1899,100 @@ local function beginArrival(job)
         jsonWriteFile(tmp, defs, false)
         loadJsonMaterialsFile('/' .. tmp)
         for name in pairs(defs) do
-          n = n + 1
-          local obj = createObject('ProceduralMesh')
-          obj:registerObject('e2r_pk_' .. n)
-          obj.canSave = false
-          group:addObject(obj.obj)
-          obj:createMesh({{{verts = {{x = 0, y = 0, z = 0}, {x = 3, y = 0, z = 0}, {x = 0, y = 3, z = 0}},
-                            normals = {{x = 0, y = 0, z = 1}}, uvs = {{u = 0, v = 0}, {u = 1, v = 0}, {u = 0, v = 1}},
-                            faces = {{v = 0, n = 0, u = 0}, {v = 2, n = 0, u = 2}, {v = 1, n = 0, u = 1}},
-                            material = name}}})
-          local sp0 = manifest.spawn.pos
-          obj:setPosition(vec3(sp0[1] + (n % 20) * 4 - 40, sp0[2] + math.floor(n / 20) * 4 + 30, sp0[3] + 3))
+          S.warmQ[#S.warmQ + 1] = {kind = 'pack', material = name}
         end
       end
       S.packsWarm = true
-      result.packMaterialsWarmed = n
     end
     if S.pack and S.pack ~= 'real' then applyPack(S.pack) end   -- keep the player's choice
   end
+  result.arrivalMs.packs = math.floor(packTimer:stop())
   commands.setFreeCamera()
   cameraOver(CAM_HIGH)
   -- one visible triangle per material: texture upload and pipeline creation happen now, high up,
-  -- instead of while driving (Obolon runs 24/25)
-  local warm = tileGroup('E2RWorldWarmup')
-  local sp = manifest.spawn.pos
+  -- instead of while driving (Obolon runs 24/25). Queued, not built here: warmStep creates them
+  -- a few a frame, the camera stays up until the queue is done.
   for k, mat in ipairs(manifest.mats) do
-    local obj = createObject('ProceduralMesh')
-    obj:registerObject('e2r_warm_' .. k)
-    obj.canSave = false
-    warm:addObject(obj.obj)
-    obj:createMesh({{{verts = {{x = 0, y = 0, z = 0}, {x = 3, y = 0, z = 0}, {x = 0, y = 3, z = 0}},
-                      normals = {{x = 0, y = 0, z = 1}}, uvs = {{u = 0, v = 0}, {u = 1, v = 0}, {u = 0, v = 1}},
-                      faces = {{v = 0, n = 0, u = 0}, {v = 2, n = 0, u = 2}, {v = 1, n = 0, u = 1}},
-                      material = mat}}})
-    obj:setPosition(vec3(sp[1] + (k % 12) * 4 - 24, sp[2] + math.floor(k / 12) * 4 - 24, sp[3] + 3))
+    S.warmQ[#S.warmQ + 1] = {kind = 'mat', material = mat}
   end
   -- Render each shape during loading so its materials/shaders are uploaded as well as
   -- its mesh. Keep the instances underground afterwards to retain the loaded resources.
-  local shapes = tileGroup('E2RWorldShapes')
   for k, shape in ipairs(manifest.warmShapes or {}) do
-    local obj = createObject('TSStatic')
-    obj:setField('shapeName', 0, shape)
-    obj:setField('collisionType', 0, 'None')
-    obj:setPosRot(sp[1] - CAM_HIGH * 0.35 + 20 + (k - 4) * 8,
-                  sp[2] - CAM_HIGH * 0.55 + 35, sp[3] + CAM_HIGH - 65, 0, 0, 0, 1)
-    obj:registerObject('e2r_shape_' .. k)
-    shapes:addObject(obj)
+    S.warmQ[#S.warmQ + 1] = {kind = 'shape', shape = shape, k = k}
   end
   S.state, S.phaseAt, S.frames = 'warmup', S.now, {}
   result.readyAt, result.timings = S.now, job.timings
+  result.arrivalMs.total = math.floor(arrivalTimer:stop())
   saveResult()
+end
+
+-- The landing warm-up, one frame budget at a time. Each material still gets a visible triangle, so
+-- its texture and pipeline exist before the drive; creating all of them in the arrival frame stalled
+-- the main thread for 17 s (result.warmupFrames.worstFrameMs) right after the generation. The Lua
+-- calls are cheap - the cost lands in the engine's render of the new materials - so the frame is
+-- capped by the item count as well as by the timer.
+local WARM_BUDGET_MS, WARM_MAX_ITEMS = 30, 48
+local function warmStep()
+  local q = S.warmQ
+  if not q or S.warmAt >= #q then return true end
+  local groups = S.warmGroups
+  if not groups then
+    groups = {mat = tileGroup('E2RWorldWarmup'), pack = tileGroup('E2RWorldPacks'), shape = tileGroup('E2RWorldShapes')}
+    S.warmGroups = groups
+  end
+  local sp = S.landing.spawn.pos
+  local timer, packs, done = hptimer(), 0, 0
+  while S.warmAt < #q do
+    S.warmAt = S.warmAt + 1
+    local item = q[S.warmAt]
+    local itemTimer = hptimer()
+    if item.kind == 'tile' then
+      retireForest(item.obj)
+      dropGroup('E2RT_' .. item.key); dropGroup('E2RD_' .. item.key); dropGroup('E2RS_' .. item.key)
+      item.obj.dropped = true
+    elseif item.kind == 'far' then
+      retireForest(item.obj)
+      dropGroup('E2RF_' .. item.key)
+      item.obj.dropped = true
+    elseif item.kind == 'horizon' then
+      dropGroup(item.obj.groupName or ('E2RH_' .. item.key:gsub('[^%w_]', '_')))
+      item.obj.dropped = true
+    else
+      S.warmN = S.warmN + 1
+      if item.kind == 'shape' then
+        local obj = createObject('TSStatic')
+        obj:setField('shapeName', 0, item.shape)
+        obj:setField('collisionType', 0, 'None')
+        obj:setPosRot(sp[1] - CAM_HIGH * 0.35 + 20 + (item.k - 4) * 8,
+                      sp[2] - CAM_HIGH * 0.55 + 35, sp[3] + CAM_HIGH - 65, 0, 0, 0, 1)
+        obj:registerObject('e2r_shape_' .. item.k)
+        groups.shape:addObject(obj)
+      else
+        local obj = createObject('ProceduralMesh')
+        obj:registerObject('e2r_' .. item.kind .. '_' .. S.warmN)
+        obj.canSave = false
+        groups[item.kind]:addObject(obj.obj)
+        obj:createMesh({{{verts = {{x = 0, y = 0, z = 0}, {x = 3, y = 0, z = 0}, {x = 0, y = 3, z = 0}},
+                          normals = {{x = 0, y = 0, z = 1}}, uvs = {{u = 0, v = 0}, {u = 1, v = 0}, {u = 0, v = 1}},
+                          faces = {{v = 0, n = 0, u = 0}, {v = 2, n = 0, u = 2}, {v = 1, n = 0, u = 1}},
+                          material = item.material}}})
+        obj:setPosition(vec3(sp[1] + (S.warmN % 20) * 4 - 40, sp[2] + math.floor(S.warmN / 20) * 4 + 30, sp[3] + 3))
+        if item.kind == 'pack' then packs = packs + 1 end
+      end
+    end
+    local itemMs = math.floor(itemTimer:stop())
+    if itemMs >= 200 and #(S.warmTimes or {}) < 40 then
+      -- which warm-up item blocked a frame (result.warmTimes, diagnosis)
+      S.warmTimes = S.warmTimes or {}
+      table.insert(S.warmTimes, {item.kind, itemMs, S.warmAt})
+      result.warmTimes = S.warmTimes
+    end
+    if timer:stopAndReset() > WARM_BUDGET_MS then break end
+    done = done + 1
+    if done >= WARM_MAX_ITEMS then break end
+  end
+  if packs > 0 then result.packMaterialsWarmed = (result.packMaterialsWarmed or 0) + packs end
+  return S.warmAt >= #q
 end
 
 -- Called after the landing tile is loaded and its collision rebuilt (teleporting in the same frame
@@ -3913,17 +3965,21 @@ function M.tick(dt)
   if S.state == 'generating' then
     local job = S.status and S.status.job
     if job and job.seq == S.landSeq and job.state == 'ready' then beginArrival(job) end
-  elseif S.state == 'warmup' and S.now - S.phaseAt > 3 then
-    if test then shot('3-descent') end
-    result.warmupFrames = frameStats(S.frames)
-    dropGroup('E2RWorldWarmup')
-    dropGroup('E2RWorldPacks')
-    local sp = S.landing.spawn.pos
-    for k in ipairs(S.landing.warmShapes or {}) do
-      local obj = scenetree.findObject('e2r_shape_' .. k)
-      if obj then obj:setPosRot(sp[1] + k * 3, sp[2], sp[3] - 40, 0, 0, 0, 1) end
+  elseif S.state == 'warmup' then
+    local warmed = warmStep()
+    if warmed and S.now - S.phaseAt > 3 then
+      if test then shot('3-descent') end
+      result.warmupFrames = frameStats(S.frames)
+      dropGroup('E2RWorldWarmup')
+      dropGroup('E2RWorldPacks')
+      S.warmGroups = nil
+      local sp = S.landing.spawn.pos
+      for k in ipairs(S.landing.warmShapes or {}) do
+        local obj = scenetree.findObject('e2r_shape_' .. k)
+        if obj then obj:setPosRot(sp[1] + k * 3, sp[2], sp[3] - 40, 0, 0, 0, 1) end
+      end
+      S.state, S.frames, S.phaseAt = 'spawning', {}, S.now
     end
-    S.state, S.frames, S.phaseAt = 'spawning', {}, S.now
   end
   if S.stream and (S.state == 'spawning' or S.state == 'driving') then
     -- which step made a slow frame (result.slow, automation and diagnosis)
