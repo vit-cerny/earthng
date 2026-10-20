@@ -344,6 +344,26 @@ class CountryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'non-finite'):
             country.compile_cell(self.store, [0, 0, 1000, 1000])
 
+    def test_building_height_is_tag_then_levels_then_type_default(self):
+        self.assertEqual(country.building_height({}), 6.)                                   # unknown type
+        self.assertEqual(country.building_height({'building': 'garage'}), 2.8)
+        self.assertEqual(country.building_height({'building': 'house'}), 6.)
+        self.assertEqual(country.building_height({'building': 'apartments'}), 12.)
+        self.assertEqual(country.building_height({'building': 'house', 'building:levels': '5'}), 15.)
+        self.assertEqual(country.building_height({'building': 'apartments', 'height': '4.2'}), 4.2)
+        self.assertEqual(country.building_height({'building': 'garage', 'building:levels': '2'}), 6.)
+        self.assertEqual(country.building_height({'building': 'tower'}), 18.)
+        self.assertEqual(country.building_height({'building': 'yes', 'height': '1'}), 2.5)  # clamp kept
+
+    def test_untagged_garage_house_and_apartment_export_their_own_heights(self):
+        def footprint(fid, kind, x):
+            return (fid, 'building', {'tags': {'building': kind}},
+                    Polygon([(x, 100), (x + 40, 100), (x + 40, 140), (x, 140)]))
+        self.store.scenery = lambda rect: [footprint(1, 'garage', 100), footprint(2, 'house', 300),
+                                           footprint(3, 'apartments', 500), footprint(4, 'nonsense', 700)]
+        cell = country.compile_cell(self.store, [0, 0, 1000, 1000])
+        self.assertEqual([f['height'] for f in cell['buildings']], [2.8, 6., 12., 6.])
+
 
 if __name__ == '__main__':
     unittest.main()

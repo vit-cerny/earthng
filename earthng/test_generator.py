@@ -236,6 +236,37 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(len(nav.segments), 0)
         self.assertFalse(road.drivable)
 
+    def test_untagged_garage_and_house_draw_their_own_heights(self):
+        datum = 20
+        garage = {'id': 'garage', 'rings': [[[100, 100, datum], [106, 100, datum], [106, 106, datum],
+                                            [100, 106, datum]]], 'tags': {'building': 'garage'}}
+        house = {'id': 'house', 'rings': [[[300, 100, datum], [310, 100, datum], [310, 108, datum],
+                                          [300, 108, datum]]], 'tags': {'building': 'house'}}
+        _, scene, _, _ = self.build([{'buildings': [garage, house],
+                                      'terrain': {'rect': [0, 0, 1000, 1000], 'nx': 2, 'ny': 2,
+                                                  'heights': [datum] * 4}}])
+        # The eaves are the top of the wall; a pitched roof rises above them and continues a
+        # gable in the wall material, so the lowest roof vertex is the wall top.
+        roof = list(self.triangles(scene, 'e2rf_roof_tile'))
+
+        def wall_top(x0, x1):
+            return round(min(p[2] for tri in roof for p in tri if x0 <= p[0] <= x1) - datum, 3)
+        self.assertEqual((wall_top(100, 106), wall_top(300, 310)), (2.8, 6.))
+
+    def test_building_height_mirrors_the_python_builder(self):
+        def top(tags):
+            _, scene, _, _ = self.build([{'buildings': [
+                {'id': 'b', 'rings': [[[100, 100, 0], [120, 100, 0], [120, 120, 0], [100, 120, 0]]],
+                 'tags': tags}]}])
+            eaves = [mesh.verts[mesh.faces[k].v + 1].z
+                     for _, mesh in self.meshes(scene) if mesh.material.startswith('e2rf_roof')
+                     for k in range(1, len(mesh.faces) + 1)]
+            return round(min(eaves), 3)
+        self.assertEqual(top({'building': 'apartments'}), 12.)                # four storeys by type
+        self.assertEqual(top({'building': 'house', 'building:levels': '5'}), 15.)
+        self.assertEqual(top({'building': 'house', 'height': '4.2'}), 4.2)    # the tag wins
+        self.assertEqual(top({'building': 'nonsense'}), 6.)                   # unknown: two storeys
+
     def test_feature_duplicates_do_not_double_geometry_or_nav(self):
         cell = {'roads': [{'id': 'same', 'points': [[100, 100, 10], [200, 100, 10]],
                            'nodes': [1, 2], 'width': 7, 'tags': {'highway': 'residential'}}]}

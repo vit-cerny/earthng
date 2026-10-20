@@ -42,6 +42,29 @@ PAD = (0.12, 0.08)        # source window beyond the core: MARGIN + HALO + tile 
 ID = re.compile(r'[a-z0-9](?:[a-z0-9-]{0,94}[a-z0-9])?\Z')
 SOURCE_ID = re.compile(r'[a-z0-9][a-z0-9_-]{0,95}\Z')
 
+LEVEL = 3.0               # OSM wiki default storey height
+SHED_LEVEL = 2.8          # one storey of a garage or a shed is a low box, not a 3 m storey
+DEFAULT_LEVELS = {
+    'garage': 1, 'garages': 1, 'carport': 1, 'shed': 1, 'hut': 1, 'roof': 1, 'greenhouse': 1,
+    'barn': 1, 'stable': 1, 'farm_auxiliary': 1, 'bungalow': 1,
+    'house': 2, 'detached': 2, 'semidetached_house': 2, 'terrace': 2, 'residential': 2, 'yes': 2,
+    'apartments': 4, 'dormitory': 4, 'hotel': 4, 'office': 4, 'university': 4, 'hospital': 4,
+    'industrial': 3, 'factory': 3,
+    'warehouse': 2, 'manufacture': 2, 'commercial': 2, 'retail': 2, 'supermarket': 2,
+    'civic': 3, 'public': 3, 'school': 3,
+    'church': 4, 'chapel': 2, 'cathedral': 6, 'tower': 6,
+}
+SHEDS = frozenset(name for name, levels in DEFAULT_LEVELS.items() if levels == 1)
+
+
+def building_height(tags):
+    """Metres: the OSM height tag, else building:levels storeys, else the type default, else
+    two storeys. The clamp is the one the runtime has always applied."""
+    kind = tags.get('building')
+    levels = sources.number(tags.get('building:levels'), DEFAULT_LEVELS.get(kind, 2))
+    storey = SHED_LEVEL if kind in SHEDS and levels == 1 else LEVEL
+    return max(2.5, min(850., sources.number(tags.get('height'), levels * storey)))
+
 
 def _identifier(value, label):
     if not isinstance(value, str) or not ID.fullmatch(value):
@@ -223,8 +246,7 @@ def compile_cell(store, rect, include=None):
         for n, part in enumerate(_parts(geometry, 'Polygon')):
             feature = {'id': f'{fid}:{n}', 'kind': kind, 'rings': _rings(store, part, None, pending), 'tags': tags}
             if kind == 'building':
-                height = max(2.5, min(850., sources.number(tags.get('height'),
-                             sources.number(tags.get('building:levels'), 3) * 3)))
+                height = building_height(tags)
                 feature.update(height=height, minHeight=max(0., sources.number(tags.get('min_height'), 0.)))
                 cell['buildings'].append(feature)
             else:

@@ -709,10 +709,33 @@ local function walkSides(tags)
   return {[1] = true, [-1] = true}
 end
 
+-- Building height in metres: the OSM height tag, else building:levels storeys, else the type
+-- default, else two storeys. Mirrors LEVEL, SHED_LEVEL and DEFAULT_LEVELS in build_country.py.
+local LEVEL, SHED_LEVEL = 3, 2.8
+local DEFAULT_LEVELS = {
+  garage = 1, garages = 1, carport = 1, shed = 1, hut = 1, roof = 1, greenhouse = 1,
+  barn = 1, stable = 1, farm_auxiliary = 1, bungalow = 1,
+  house = 2, detached = 2, semidetached_house = 2, terrace = 2, residential = 2, yes = 2,
+  apartments = 4, dormitory = 4, hotel = 4, office = 4, university = 4, hospital = 4,
+  industrial = 3, factory = 3,
+  warehouse = 2, manufacture = 2, commercial = 2, retail = 2, supermarket = 2,
+  civic = 3, public = 3, school = 3,
+  church = 4, chapel = 2, cathedral = 6, tower = 6,
+}
+local SHEDS = {garage = true, garages = true, carport = true, shed = true, hut = true, roof = true,
+  greenhouse = true, barn = true, stable = true, farm_auxiliary = true, bungalow = true}
+local function buildingHeight(building)
+  local tags = building.tags or {}
+  local kind = tags.building
+  local levels = number(tags['building:levels'], DEFAULT_LEVELS[kind] or 2)
+  local storey = SHEDS[kind] and levels == 1 and SHED_LEVEL or LEVEL
+  return math.max(2.5, math.min(850, building.height or number(tags.height, levels * storey)))
+end
+
 local function wallMaterial(building, look)
   local tags = building.tags or {}
   local h = hash(tostring(building.id or ''))
-  local height = building.height or number(tags.height, number(tags['building:levels'], 3) * 3)
+  local height = buildingHeight(building)
   local material = tags['building:material'] or tags['facade:material']
   local b = tags.building
   look = type(look) == 'table' and look or NONE
@@ -2132,7 +2155,7 @@ local function build(cells, i, j, options)
       -- a footprint bridging a dip still gets the extra skirt below.
       if sourceCount > 0 then low = math.min(sourceLow, low ~= math.huge and low or sourceLow) end
       if low == math.huge then low = base end
-      local height = math.max(2.5, math.min(850, building.height or number(tags.height, number(tags['building:levels'], 3) * 3)))
+      local height = buildingHeight(building)
       local bottom = (building.minHeight or number(tags.min_height, 0)) > 0 and base + (building.minHeight or number(tags.min_height, 0)) or low - .8
       local top, kind = base + height, wallMaterial(building, look)
       for _, raw in ipairs(rings) do
