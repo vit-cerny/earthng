@@ -5,11 +5,14 @@
 Moravia / Czech Republic pack rebuilt with realistic building heights and published as
 a release asset:
 https://github.com/vit-cerny/earthng/releases/tag/moravia-0.4.1
-- earthng_czech-republic.zip, 792,886,414 bytes, sha256
-  84b1843397a172295f8823c51f091f6e2df4e07a81d3ccd782d58b5822a90660 (pack 0.4.1)
+- earthng_czech-republic.zip, 792,680,083 bytes, sha256
+  57f4f25ee34f855765f7f9b50cdc39c903aca4d2f9d448e4c4464af27ef15943
+  (wide coverage: all Moravia incl. Jihlava/Znojmo/Dacice, plus eastern Bohemia)
 - earthng_planet.zip, 86,513,875 bytes, sha256
   0c90f2ec2cd54e8977b2cb277118a8a6d7dbf977cc3f64f2c462516ba9402d3e
   (runtime with the grounding, height and 0.40 fixes; use it instead of the upstream ZIP)
+- earthng_art_fix.zip, 38,532 bytes - the five pixel road textures the upstream planet ZIP
+  is missing (road_worn/gravel/dirt/broken/track); keep it in mods beside the planet ZIP
 
 Building heights: `height` tag, else `building:levels` x 3 m, else a per-type default
 (garage/shed 1 storey = 2.8 m, house 2 = 6 m, apartments 4 = 12 m, industrial 3 = 9 m,
