@@ -772,6 +772,10 @@ local function pitchedRoof(scene, rings, tags, top, base, kind, height)
   local frame = footprintFrame(ring)
   local length, width = frame.u1 - frame.u0, frame.v1 - frame.v0
   local shape, house = tags['roof:shape'], tags.building == 'house' or tags.building == 'detached' or tags.building == 'bungalow'
+  -- The builder already treats these as pitched (earthng/fast_style.py pitched()); drop them to
+  -- the nearest shape the runtime can draw instead of falling back to a flat roof.
+  if shape == 'saltbox' then shape = 'gabled'
+  elseif shape == 'mansard' or shape == 'gambrel' then shape = 'hipped' end
   if shape and shape ~= 'gabled' and shape ~= 'hipped' and shape ~= 'pyramidal' and shape ~= 'half-hipped' then return false end
   if not shape and not (house or (height < 8 and frame.area < 260)) then return false end
   if width < 3 or length < 3 or frame.area / math.max(EPS, length * width) < .82 then return false end
@@ -2112,11 +2116,24 @@ local function build(cells, i, j, options)
         exterior = rings[1]
       end
       local low, cx, cy = math.huge, 0, 0
-      for _, p in ipairs(exterior) do low, cx, cy = math.min(low, ground(p[1], p[2])), cx + p[1], cy + p[2] end
+      for _, p in ipairs(exterior) do
+        -- Only a point the drawn mesh actually covers gives a usable ground height; outside the
+        -- DEM grids ground() is the flat 0 fallback, which must not sink a building to sea level.
+        if demCovered(p[1], p[2]) then
+          local g = ground(p[1], p[2])
+          if g < low then low = g end
+        end
+        cx, cy = cx + p[1], cy + p[2]
+      end
       local base = sourceCount > 0 and sourceSum / sourceCount or ground(cx / #exterior, cy / #exterior)
-      if sourceCount > 0 then low = sourceLow end
+      -- The exported footprint Z is the DEM datum; the drawn ground is the smoothed lattice with
+      -- the road pull. Sitting on the DEM alone floats a building wherever the mesh dips below the
+      -- sample (slopes, road cuts). Use the lower of the two so the walls always reach the ground;
+      -- a footprint bridging a dip still gets the extra skirt below.
+      if sourceCount > 0 then low = math.min(sourceLow, low ~= math.huge and low or sourceLow) end
+      if low == math.huge then low = base end
       local height = math.max(2.5, math.min(850, building.height or number(tags.height, number(tags['building:levels'], 3) * 3)))
-      local bottom = (building.minHeight or number(tags.min_height, 0)) > 0 and base + (building.minHeight or number(tags.min_height, 0)) or low - .3
+      local bottom = (building.minHeight or number(tags.min_height, 0)) > 0 and base + (building.minHeight or number(tags.min_height, 0)) or low - .8
       local top, kind = base + height, wallMaterial(building, look)
       for _, raw in ipairs(rings) do
         local ring, along = cleanRing(raw), 0
