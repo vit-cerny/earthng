@@ -4,8 +4,8 @@
 
 Moravia / Czech Republic pack built locally and published as release asset:
 https://github.com/vit-cerny/earthng/releases/tag/moravia-0.4.0
-(earthng_czech-republic.zip, 792,507,956 bytes,
-sha256 c6419f93fe27d53a47172dbde39b36706c5496623137b4557fda593167cc6589).
+(earthng_czech-republic.zip, 792,680,083 bytes,
+sha256 57f4f25ee34f855765f7f9b50cdc39c903aca4d2f9d448e4c4464af27ef15943).
 Runtime verified on BeamNG.drive 0.40.0.0.287428: all three mods mount, e2r_world
 loads, levels/e2r_world loads, and no EarthNG Lua errors appear (mount + level-load
 smoke test; landing and driving were not automated).
