@@ -2,23 +2,42 @@
 
 ## Fork notes (vit-cerny)
 
-Moravia / Czech Republic pack built locally and published as release asset:
-https://github.com/vit-cerny/earthng/releases/tag/moravia-0.4.0
-(earthng_czech-republic.zip, 792,680,083 bytes,
-sha256 57f4f25ee34f855765f7f9b50cdc39c903aca4d2f9d448e4c4464af27ef15943).
-Runtime verified on BeamNG.drive 0.40.0.0.287428: all three mods mount, e2r_world
-loads, levels/e2r_world loads, and no EarthNG Lua errors appear (mount + level-load
-smoke test; landing and driving were not automated).
+Moravia / Czech Republic pack rebuilt with realistic building heights and published as
+a release asset:
+https://github.com/vit-cerny/earthng/releases/tag/moravia-0.4.1
+- earthng_czech-republic.zip, 792,886,414 bytes, sha256
+  84b1843397a172295f8823c51f091f6e2df4e07a81d3ccd782d58b5822a90660 (pack 0.4.1)
+- earthng_planet.zip, 86,513,875 bytes, sha256
+  0c90f2ec2cd54e8977b2cb277118a8a6d7dbf977cc3f64f2c462516ba9402d3e
+  (runtime with the grounding, height and 0.40 fixes; use it instead of the upstream ZIP)
+
+Building heights: `height` tag, else `building:levels` x 3 m, else a per-type default
+(garage/shed 1 storey = 2.8 m, house 2 = 6 m, apartments 4 = 12 m, industrial 3 = 9 m,
+church 4 = 12 m), else 2 storeys. Before, every untagged building was 9 m; 33% of Czech
+buildings have no `building:levels` and 98.6% no `height`, so a third of the map was
+wrong. In the built pack (region e0165-n490, 192,053 buildings) the share at exactly
+9.0 m falls from 51.4% to 4.0% and the mean height from 6.54 m to 4.74 m.
 Building grounding fix in `mod/lua/ge/extensions/e2r/generator.lua`: a building now
 sits on the lower of the exported DEM minimum and the drawn terrain-mesh minimum
 over its footprint (demCovered guard), with a 0.8 m skirt, instead of the DEM sample
 alone, which floated buildings wherever the smoothed mesh dipped below it;
 `roof:shape=saltbox/mansard/gambrel` now map to the nearest drawable pitched shape
 instead of a flat roof.
+0.40 port: the extension registers `setExtensionUnloadMode` before load (the startup
+warning is gone) and the test gallery uses `screenshot.createScreenshotTracked` instead
+of the raw call that 0.40 logs as an unknown job id.
+Runtime verified on BeamNG.drive 0.40.0.0.287428: all three mods mount, e2r_world
+loads, 0 Script Errors and 0 EarthNG startup warnings (`D:\earthng\test-mount.ps1`:
+PASS); an automated run landed, drove 63.7 m (functional status passed) and took
+gallery screenshots at Brno and a village - buildings sit on the ground, heights and
+roofs vary, roads follow the terrain. The only remaining log warnings are 5 road-variant
+textures missing from the planet ZIP (road_worn/track/dirt/broken/gravel, also on 0.39.4;
+the game renders a fallback).
 Data/licensing: country data is OpenStreetMap (ODbL-1.0). Google Maps 3D tiles are
 not usable in a redistributable mod (keyed API, terms forbid extraction/redistribution).
 The legal accuracy path for Czechia is CUZK open data (CC-BY 4.0): ZABAGED footprints
-and DMR 5G LiDAR for heights.
+and DMR 5G LiDAR for heights. MSFS itself builds autogen from OSM footprints plus
+heights, which is the same legal path this pack uses.
 
 Drive through real places in BeamNG.drive. EarthNG builds roads, buildings and
 terrain from OpenStreetMap and elevation data as you drive.
