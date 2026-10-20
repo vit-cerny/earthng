@@ -457,7 +457,7 @@ end
 -- crowns a tile planted are found again in the Forest by its rectangle when it goes; a
 -- crown of this tile still waiting for a commit is skipped there instead (forestGen).
 -- Near and far crowns of one key never stand at once, so the rectangle is the tile's.
-local function retireForest(tile)
+local function retireForest(tile, tileSize)
   if detailStream and tile then detailStream:remove(tile) end
   if not tile then return end
   tile.forestGen = (tile.forestGen or 0) + 1
@@ -466,7 +466,7 @@ local function retireForest(tile)
   local f = forestFor()
   local data = f and f:getData()
   if not data or not Box3F then return end
-  local t = S.stream and S.stream.tile or 500
+  local t = tileSize or (S.stream and S.stream.tile) or 500
   local box = Box3F()
   -- a centimetre in from the edges: a neighbour's crown on the shared edge stays
   box.minExtents = vec3(tile.i * t + .01, tile.j * t + .01, -1e5)
@@ -1829,11 +1829,13 @@ local function beginArrival(job)
   -- arrival for 7-14 s (world-test-warm-01). warmStep runs the queue before the state leaves
   -- 'warmup', so no tile of the new place is dropped by a late retire.
   S.warmQ, S.warmAt, S.warmN, S.warmGroups = {}, 0, 0, nil
+  S.warmTimes, result.warmTimes = nil, nil
+  local oldTile = S.stream and S.stream.tile
   for key, tile in pairs(S.tiles) do
-    S.warmQ[#S.warmQ + 1] = {kind = 'tile', key = key, obj = tile}
+    S.warmQ[#S.warmQ + 1] = {kind = 'tile', key = key, obj = tile, tileSize = oldTile}
   end
   for key, far in pairs(S.far) do
-    S.warmQ[#S.warmQ + 1] = {kind = 'far', key = key, obj = far}
+    S.warmQ[#S.warmQ + 1] = {kind = 'far', key = key, obj = far, tileSize = oldTile}
   end
   for key, horizon in pairs(S.horizon or {}) do
     S.warmQ[#S.warmQ + 1] = {kind = 'horizon', key = key, obj = horizon}
@@ -1935,6 +1937,7 @@ local WARM_BUDGET_MS, WARM_MAX_ITEMS = 30, 48
 local function warmStep()
   local q = S.warmQ
   if not q or S.warmAt >= #q then return true end
+  if not S.landing or not S.landing.spawn then return true end
   local groups = S.warmGroups
   if not groups then
     groups = {mat = tileGroup('E2RWorldWarmup'), pack = tileGroup('E2RWorldPacks'), shape = tileGroup('E2RWorldShapes')}
@@ -1947,15 +1950,21 @@ local function warmStep()
     local item = q[S.warmAt]
     local itemTimer = hptimer()
     if item.kind == 'tile' then
-      retireForest(item.obj)
-      dropGroup('E2RT_' .. item.key); dropGroup('E2RD_' .. item.key); dropGroup('E2RS_' .. item.key)
+      if not item.obj.dropped then
+        retireForest(item.obj, item.tileSize)
+        buryGroup('E2RT_' .. item.key); buryGroup('E2RD_' .. item.key); buryGroup('E2RS_' .. item.key)
+      end
       item.obj.dropped = true
     elseif item.kind == 'far' then
-      retireForest(item.obj)
-      dropGroup('E2RF_' .. item.key)
+      if not item.obj.dropped then
+        retireForest(item.obj, item.tileSize)
+        buryGroup('E2RF_' .. item.key)
+      end
       item.obj.dropped = true
     elseif item.kind == 'horizon' then
-      dropGroup(item.obj.groupName or ('E2RH_' .. item.key:gsub('[^%w_]', '_')))
+      if not item.obj.dropped then
+        buryGroup(item.obj.groupName or ('E2RH_' .. item.key:gsub('[^%w_]', '_')))
+      end
       item.obj.dropped = true
     else
       S.warmN = S.warmN + 1
@@ -3966,6 +3975,7 @@ function M.tick(dt)
     local job = S.status and S.status.job
     if job and job.seq == S.landSeq and job.state == 'ready' then beginArrival(job) end
   elseif S.state == 'warmup' then
+    digGraves()
     local warmed = warmStep()
     if warmed and S.now - S.phaseAt > 3 then
       if test then shot('3-descent') end
