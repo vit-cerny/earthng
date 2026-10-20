@@ -176,7 +176,10 @@ end
 
 local function shot(name)
   if not test then return end
-  createScreenshot2({filename = 'screenshots/e2r-' .. name, writeJPG = false, superSampling = 1})
+  -- 0.40 tracks screenshot jobs inside the game's screenshot module; the raw engine call leaves its
+  -- progress/saved callbacks with an unknown job id and logs an error for every shot.
+  local tracked = type(screenshot) == 'table' and screenshot.createScreenshotTracked
+  pcall(tracked or createScreenshot2, {filename = 'screenshots/e2r-' .. name, writeJPG = false, superSampling = 1})
   table.insert(result.shots, name)
   -- what the picture was taken under (pack looks vary run to run: exposure, night sky)
   pcall(function()

@@ -293,7 +293,7 @@ def build_place(place, mods, root=ROOT, look=None, include=None, box=None, jobs=
     emit(f"building earthng_{slug_id}.zip, block {look['block']}")
     with stage('Export'):
         archive = build_country.build_country(
-            slug_id, place['name'], '0.4.0', regions, out, emit=emit, jobs=jobs,
+            slug_id, place['name'], '0.4.1', regions, out, emit=emit, jobs=jobs,
             landing=landing, look=look, include=include, cancel=cancel)
     if cancel is not None and cancel.is_set():
         raise InterruptedError('build stopped; completed ZIP retained, not installed')
