@@ -6,7 +6,9 @@ Moravia / Czech Republic pack built locally and published as release asset:
 https://github.com/vit-cerny/earthng/releases/tag/moravia-0.4.0
 (earthng_czech-republic.zip, 792,507,956 bytes,
 sha256 c6419f93fe27d53a47172dbde39b36706c5496623137b4557fda593167cc6589).
-Runtime tested with BeamNG.drive 0.39.4; 0.40 status: not yet verified upstream or here.
+Runtime verified on BeamNG.drive 0.40.0.0.287428: all three mods mount, e2r_world
+loads, levels/e2r_world loads, and no EarthNG Lua errors appear (mount + level-load
+smoke test; landing and driving were not automated).
 Building grounding fix in `mod/lua/ge/extensions/e2r/generator.lua`: a building now
 sits on the lower of the exported DEM minimum and the drawn terrain-mesh minimum
 over its footprint (demCovered guard), with a 0.8 m skirt, instead of the DEM sample
