@@ -354,6 +354,8 @@ class CountryTests(unittest.TestCase):
         self.assertEqual(country.building_height({'building': 'garage', 'building:levels': '2'}), 6.)
         self.assertEqual(country.building_height({'building': 'tower'}), 18.)
         self.assertEqual(country.building_height({'building': 'yes', 'height': '1'}), 2.5)  # clamp kept
+        self.assertEqual(country.building_height({'building': 'house', 'building:levels': '0'}), 2.5)
+        self.assertEqual(country.building_height({'building': 'house', 'building:levels': 'garbage'}), 6.)
 
     def test_untagged_garage_house_and_apartment_export_their_own_heights(self):
         def footprint(fid, kind, x):
